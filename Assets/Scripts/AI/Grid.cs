@@ -1,4 +1,6 @@
-﻿using System.Collections;
+﻿using Priority_Queue;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -25,14 +27,14 @@ public class Grid : MonoBehaviour
         {
             //  Пока что считаем все вершины проходимыми, без учёта препятствий
             node.walkable = true;
-            /*node.walkable = !Physics.CheckSphere(node.body.transform.position, 1);
+            node.walkable = !Physics.CheckSphere(node.body.transform.position, 1);
             if (node.walkable)
                 node.Fade();
             else
             {
-                node.Illuminate();
+                node.IlluminateNotWalkable();
                 Debug.Log("Not walkable!");
-            }*/
+            }
         }
     }
 
@@ -66,7 +68,7 @@ public class Grid : MonoBehaviour
         List<Vector2Int> nodes = new List<Vector2Int>();
         for (int x = current.x - 1; x <= current.x + 1; ++x)
             for (int y = current.y - 1; y <= current.y + 1; ++y)
-                if (x >= 0 && y >= 0 && x < grid.GetLength(0) && y < grid.GetLength(1) && (x != current.x || y != current.y))
+                if (x >= 0 && y >= 0 && x < grid.GetLength(0) && y < grid.GetLength(1) && (x != current.x || y != current.y) && grid[x, y].walkable)
                     nodes.Add(new Vector2Int(x, y));
                 return nodes;
     }
@@ -124,13 +126,123 @@ public class Grid : MonoBehaviour
         }
     }
 
-    // Метод вызывается каждый кадр
-    void Update()
+    void calculatePathByAStar(Vector2Int startNode, Vector2Int finishNode)
+    {
+        foreach (var node in grid)
+        {
+            node.Fade();
+            node.ParentNode = null;
+        }
+
+        CheckWalkableNodes();
+
+        PathNode start = grid[startNode.x, startNode.y];
+        PathNode finish = grid[finishNode.x, finishNode.y];
+
+        start.ParentNode = null;
+        start.Distance = 0;
+
+        SimplePriorityQueue<Vector2Int> nodesQueue = new SimplePriorityQueue<Vector2Int>();
+        nodesQueue.Enqueue(startNode, 0);
+
+        while (nodesQueue.Count > 0 )
+        {
+            Vector2Int currentNode = nodesQueue.Dequeue();
+            PathNode current = grid[currentNode.x, currentNode.y];
+
+            if (current == finish) break;
+
+            var neighbours = GetNeighbours(currentNode);
+
+            foreach (var node in neighbours)
+            {
+                var neighbour = grid[node.x, node.y];
+
+                var movingCost = current.Distance + PathNode.Dist(neighbour, current);
+
+                if (neighbour.walkable && neighbour.Distance > movingCost)
+                {
+                    neighbour.ParentNode = current;
+
+                    var f = movingCost + PathNode.Dist(neighbour, finish);
+                    nodesQueue.Enqueue(node, f);
+                }
+            }
+
+        }
+
+        var pathElem = grid[finishNode.x, finishNode.y];
+        while (pathElem != null)
+        {
+            pathElem.Illuminate();
+            pathElem = pathElem.ParentNode;
+        }
+
+    }
+
+    void calculatePathByDijkstra(Vector2Int startNode, Vector2Int finishNode)
+    {
+        foreach (var node in grid)
+        {
+            node.Fade();
+            node.ParentNode = null;
+            node.Distance = float.MaxValue;
+        }
+
+        CheckWalkableNodes();
+
+
+        PathNode start = grid[startNode.x, startNode.y];
+        start.Distance = 0;
+
+        SimplePriorityQueue<Vector2Int> nodesQueue = new SimplePriorityQueue<Vector2Int>();
+        nodesQueue.Enqueue(startNode, 0);
+
+        while (nodesQueue.Count > 0)
+        {
+            float currentDistance = nodesQueue.GetPriority(nodesQueue.First);
+
+            Vector2Int current = nodesQueue.Dequeue();
+            PathNode currentNode = grid[current.x, current.y];
+
+            if (currentNode.Distance < currentDistance) continue;
+
+            var neighbours = GetNeighbours(current);
+
+            foreach (var node in neighbours)
+            {
+                var neighbour = grid[node.x, node.y];
+
+                var movingCost = currentDistance + PathNode.Dist(neighbour, currentNode);
+
+                if (movingCost < neighbour.Distance)
+                {
+                    neighbour.ParentNode = currentNode;
+
+                    neighbour.Distance = movingCost;
+                    nodesQueue.Enqueue(node, movingCost);
+                }
+            }
+        }
+
+        var pathElem = grid[finishNode.x, finishNode.y];
+        while (pathElem != null)
+        {
+            pathElem.Illuminate();
+            pathElem = pathElem.ParentNode;
+        }
+    }
+
+
+        // Метод вызывается каждый кадр
+        void Update()
     {
         //  Чтобы не вызывать этот метод каждый кадр, устанавливаем интервал вызова в 1000 кадров
         if (Time.frameCount < updateAtFrame) return;
-        updateAtFrame = Time.frameCount + 1000;
+        updateAtFrame = Time.frameCount + 100;
 
-        calculatePath(new Vector2Int(0, 0), new Vector2Int(grid.GetLength(0)-1, grid.GetLength(1)-1));
+        //calculatePath(new Vector2Int(0, 0), new Vector2Int(grid.GetLength(0)-1, grid.GetLength(1)-1));
+        calculatePathByAStar(new Vector2Int(0, 0), new Vector2Int(grid.GetLength(0)-1, grid.GetLength(1)-1));
+        calculatePathByDijkstra(new Vector2Int(0, 0), new Vector2Int(grid.GetLength(0)-1, grid.GetLength(1)-1));
     }
 }
